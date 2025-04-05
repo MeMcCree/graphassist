@@ -1,0 +1,3 @@
+[submodule "raylib-pas"]
+	path = raylib-pas
+	url = https://github.com/MeMcCree/raylib-pas.git
