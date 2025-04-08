@@ -1,0 +1,1 @@
+gcc -Wall -I./include/ -o ./bin/graphassist ./src/graphassist.c ./lib/libraylib.a -lm

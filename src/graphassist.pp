@@ -2,7 +2,7 @@ program graphassist;
 uses raylib;
 type
     ELEM_IDX=0..1023;
-    EMarkType = (AXIS_ORIGIN, AXIS_UNIT, GRAPH_POINT, GRAPH_LINE, GRAPH_VEC, PIPETE);
+    EMarkType = (AXIS_ORIGIN, AXIS_UNIT, GRAPH_POINT, GRAPH_LINE, GRAPH_VEC, PIPETE, DEL);
     TGraphVec = record
         s, e: TVector2; 
     end;
@@ -55,16 +55,17 @@ begin
 end;
 
 const
-    screenWidth: Integer = 800;
-    screenHeight: Integer = 450;
+    screenWidth: Integer = 600;
+    screenHeight: Integer = 600;
     title: PChar = 'Graph assist';
-    MarkTypeNames: Array[AXIS_ORIGIN..PIPETE] of String = (
-        'AXIS_ORIGIN',
-        'AXIS_UNIT',
-        'GRAPH_POINT',
-        'GRAPH_LINE',
-        'GRAPH_VEC',
-        'PIPETE'
+    MarkTypeNames: Array[AXIS_ORIGIN..DEL] of String = (
+        'Origin',
+        'Unit of axis',
+        'Point',
+        'Line',
+        'Vector',
+        'Pipete',
+        'Delete'
     );
 var
     imgPath: String;
@@ -77,8 +78,8 @@ var
     undo: array of TChange;
     i: Integer;
     x, y, besty: Integer;
-    found_similar: Boolean;
-    best_sim: Single;
+    found_similar: Integer;
+    sumy: Single;
     sim: Single;
     k, b, dx, dy, transX, transY, etransX, etransY: Single;
     camera: TCamera2D;
@@ -100,8 +101,6 @@ begin
         exit;
     end;
     imgTex := LoadTextureFromImage(img);
-
-    SetWindowSize(img.width, img.height);
 
     undo_len := 0;
     state.marktype := AXIS_ORIGIN;
@@ -134,27 +133,27 @@ begin
 
         if IsKeyPressed(Ord(KEY_EQUAL)) then
         begin
-            camera.zoom += 0.1;
+            camera.zoom += 0.25;
         end;
 
         if IsKeyDown(Ord(KEY_LEFT)) then
         begin
-            camera.target.x -= 1.0;
+            camera.target.x -= 2.0;
         end;
 
         if IsKeyDown(Ord(KEY_RIGHT)) then
         begin
-            camera.target.x += 1.0;
+            camera.target.x += 2.0;
         end;
 
         if IsKeyDown(Ord(KEY_UP)) then
         begin
-            camera.target.y -= 1.0;
+            camera.target.y -= 2.0;
         end;
 
         if IsKeyDown(Ord(KEY_DOWN)) then
         begin
-            camera.target.y += 1.0;
+            camera.target.y += 2.0;
         end;
 
         if IsKeyPressed(Ord(KEY_TAB)) and not state.drawing then
@@ -173,31 +172,29 @@ begin
             x := 0;
             while x < img.width do
             begin
-                found_similar := false;
+                found_similar := 0;
                 y := 0;
-                besty := 0;
-                best_sim := 0.9;
+                sumy := 0.0;
 
                 while y < img.height do
                 begin
                     sim := Similarity(state.pick_col, GetImageColor(img, x, y));
-                    if sim >= best_sim then
+                    if sim >= 0.93 then
                     begin
-                        besty := y;
-                        best_sim := sim;
-                        found_similar := true;
+                        sumy += y;
+                        found_similar += 1;
                     end;
                     y += 1;
                 end;
 
-                if found_similar then
+                if found_similar > 0 then
                 begin
                     SetLength(state.graphPoints, state.points_len + 1);
-                    state.graphPoints[state.points_len] := Vector2(x, besty);
+                    state.graphPoints[state.points_len] := Vector2(x, sumy / found_similar);
                     state.points_len += 1;
                 end;
 
-                x += Trunc((state.unitv.x - state.origin.x) / 4.0);
+                x += Trunc((state.unitv.x - state.origin.x) / 8.0);
             end;
         end;
 
@@ -208,8 +205,8 @@ begin
             while i < state.points_len do
             begin
                 transX := (state.graphPoints[i].x - state.origin.x) / (state.unitv.x - state.origin.x);
-                transY := -1.0 * (state.graphPoints[i].y - state.origin.y) / (state.unitv.y - state.origin.y);
-                write('(', TextFormat('%.2f, %.2f', 
+                transY := (state.graphPoints[i].y - state.origin.y) / (state.unitv.y - state.origin.y);
+                write('(', TextFormat('%.3f, %.3f', 
                     transX,
                     transY),
                     ')');
@@ -225,11 +222,11 @@ begin
                 transY := (state.vecs[i].s.y - state.origin.y) / (state.unitv.y - state.origin.y);
                 etransX := (state.vecs[i].e.x - state.origin.x) / (state.unitv.x - state.origin.x);
                 etransY := (state.vecs[i].e.y - state.origin.y) / (state.unitv.y - state.origin.y);
-                write('(', TextFormat('%.2f, %.2f', 
+                write('(', TextFormat('%.3f, %.3f', 
                     transX,
                     transY),
                     ') -- ');
-                write('(', TextFormat('%.2f, %.2f', 
+                write('(', TextFormat('%.3f, %.3f', 
                     etransX,
                     etransY),
                     ');');
@@ -245,11 +242,11 @@ begin
                 transY := (state.lines[i].s.y - state.origin.y) / (state.unitv.y - state.origin.y);
                 etransX := (state.lines[i].e.x - state.origin.x) / (state.unitv.x - state.origin.x);
                 etransY := (state.lines[i].e.y - state.origin.y) / (state.unitv.y - state.origin.y);
-                dx := etransX - transX;
-                dy := etransY - transY;
+                dx := Round(etransX - transX);
+                dy := Round(etransY - transY);
                 k := dy/dx;
                 b := transY - k * transX;
-                write(TextFormat('y = %.2f*x + %.2f', k, b), '; ');
+                write(TextFormat('y = %.3f*x + %.3f', k, b), '; ');
                 i += 1;
             end;
             writeln();
@@ -313,6 +310,24 @@ begin
                     begin
                         state.pick_col := GetImageColor(img, Trunc(mousePos.x), Trunc(mousePos.y));
                     end;
+                    DEL:
+                    begin
+                        i := 0;
+                        while i < state.points_len do
+                        begin
+                            if Vector2Length(Vector2Subtract(state.graphPoints[i], mousePos)) < 1.25 then
+                            begin
+                                i += 1;
+                                while i < state.points_len do
+                                begin
+                                    state.graphPoints[i - 1] := state.graphPoints[i];
+                                    i += 1;
+                                end;
+                                Break;
+                            end;
+                            i += 1;
+                        end;
+                    end;
                 end;
             end
             else
@@ -361,9 +376,10 @@ begin
                 end;
 
                 i := 0;
-                while i < state.points_len do
+                while i < (state.points_len-1) do
                 begin
-                    DrawCircleV(state.graphPoints[i], 4.0, Color(255, 0, 255, 255));
+                    DrawCircleV(state.graphPoints[i], 2.0, Color(255, 0, 255, 255));
+                    DrawLineEx(state.graphPoints[i], state.graphPoints[i+1], 2.0, Color(255, 0, 255, 255));                    
                     i += 1;
                 end;
 
@@ -384,7 +400,7 @@ begin
 
             DrawRectangle(0, 32, 16, 16, state.pick_col);
 
-            DrawText(TextFormat('Similarity: %.2f', Similarity(state.pick_col, GetImageColor(img, Trunc(mousePos.x), Trunc(mousePos.y)))), 0, 16, 16, Color(255, 0, 255, 255));
+            DrawText(TextFormat('Similarity: %.3f', Similarity(state.pick_col, GetImageColor(img, Trunc(mousePos.x), Trunc(mousePos.y)))), 0, 16, 16, Color(255, 0, 255, 255));
             DrawText(TextFormat('Mode: %s', @MarkTypeNames[state.marktype][1]), 0, 0, 16, Color(255, 0, 255, 255));
         EndDrawing();
     end;
