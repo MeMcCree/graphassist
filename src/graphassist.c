@@ -1,6 +1,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
+#include <string.h>
+#include <assert.h>
 #include <raylib.h>
 #include <raymath.h>
 
@@ -22,7 +24,7 @@ typedef enum {
 } marktype_e;
 
 typedef enum {
-    UNDO_ORIGIN, UNDO_UNIT, UNDO_GRAPH_POINT, UNDO_LINE, UNDO_VEC, UNDO_GRAPH_POINTS, UNDOTYPE_SIZE
+    UNDO_ORIGIN, UNDO_UNIT, UNDO_GRAPH_POINT, UNDO_LINE, UNDO_VEC, UNDO_GRAPH_POINTS, UNDO_POINT, UNDOTYPE_SIZE
 } undotype_e;
 
 typedef struct {
@@ -53,6 +55,12 @@ const char* marktype_names[MARKTYPE_SIZE] = {
 typedef struct {
     Vector2 start, end;
 } graphvec_t;
+
+struct {
+    Vector2* items;
+    int count;
+    int capacity;
+} graph_points = {0};
 
 struct {
     Vector2* items;
@@ -198,8 +206,8 @@ int main(int argc, char* argv[]) {
             fd = freopen(argv[2], "w", fd);
             printf("Points:\n");
             fprintf(fd, "Points:\n");
-            for (int i = 0; i < points.count; ++i) {
-                Vector2 pu = to_units(origin, unitv, points.items[i]);
+            for (int i = 0; i < graph_points.count; ++i) {
+                Vector2 pu = to_units(origin, unitv, graph_points.items[i]);
                 printf("(%.2f, %.2f)", pu.x, pu.y);
                 fprintf(fd, "(%.2f, %.2f)", pu.x, pu.y);
             }
@@ -240,12 +248,12 @@ int main(int argc, char* argv[]) {
 
         if (!is_drawing && IsKeyPressed(KEY_G)) {
             undo.undotype = UNDO_GRAPH_POINTS;
-            undo.items = malloc(sizeof(points.items[0]) * points.capacity);
-            memcpy(undo.items, points.items, sizeof(points.items[0]) * points.capacity);
-            undo.count = points.count;
-            undo.capacity = points.capacity;
+            undo.items = malloc(sizeof(graph_points.items[0]) * graph_points.capacity);
+            memcpy(undo.items, graph_points.items, sizeof(graph_points.items[0]) * graph_points.capacity);
+            undo.count = graph_points.count;
+            undo.capacity = graph_points.capacity;
 
-            int prev_len = points.count;
+            int prev_len = graph_points.count;
             for (float x = 0.0; x < img.width; x += unitv.x / 16.0f) {
                 float sumy = 0.0f;
                 int numy = 0;
@@ -255,17 +263,17 @@ int main(int argc, char* argv[]) {
                         numy++;
                     }
                     if (numy) {
-                        da_append(&points, ((Vector2){x, sumy/numy}));
+                        da_append(&graph_points, ((Vector2){x, sumy/numy}));
                         break;
                     }
                 }
             }
-            if (points.count - prev_len) {
+            if (graph_points.count - prev_len) {
                 da_append(&undos, undo);
             } else {
                 free(undo.items);
             }
-            TraceLog(LOG_INFO, "Added %d points", points.count - prev_len);
+            TraceLog(LOG_INFO, "Added %d graph_points", graph_points.count - prev_len);
         }
 
         if (!is_drawing && undos.count > 0 && IsKeyPressed(KEY_Z) && IsKeyDown(KEY_LEFT_CONTROL)) {
@@ -278,10 +286,10 @@ int main(int argc, char* argv[]) {
                     origin = undo.prev_pos;
                 } break;
                 case UNDO_GRAPH_POINT: {
-                    for (int i = undo.pos; i < points.count - 1; i++) {
-                        points.items[i] = points.items[i + 1];
+                    for (int i = undo.pos; i < graph_points.count - 1; i++) {
+                        graph_points.items[i] = graph_points.items[i + 1];
                     }
-                    points.count--;
+                    graph_points.count--;
                 } break;
                 case UNDO_VEC: {
                     vecs.count = undo.prev_len;
@@ -290,11 +298,15 @@ int main(int argc, char* argv[]) {
                     lines.count = undo.prev_len;
                 } break;
                 case UNDO_GRAPH_POINTS: {
-                    free(points.items);
-                    points.items = undo.items;
-                    points.count = undo.count;
-                    points.capacity = undo.capacity;
+                    free(graph_points.items);
+                    graph_points.items = undo.items;
+                    graph_points.count = undo.count;
+                    graph_points.capacity = undo.capacity;
                 } break;
+                case UNDO_POINT: {
+                    points.count = undo.prev_len;
+                } break;
+                default: assert(0 && "unreachable");
             }
             undos.count--;
         }
@@ -325,17 +337,17 @@ int main(int argc, char* argv[]) {
                         if (snapping && origin_set && unitv_set) {
                             mouse_pos = snap_to_grid(origin, unitv, mouse_pos);
                         }
-                        da_append(&points, mouse_pos);
+                        da_append(&graph_points, mouse_pos);
                         int i;
-                        for (i = 0; i < points.count - 1; ++i) {
-                            if (points.items[i].x > mouse_pos.x) {
-                                TraceLog(LOG_INFO, "Inserting at %d; points.count: %d", i, points.count);
+                        for (i = 0; i < graph_points.count - 1; ++i) {
+                            if (graph_points.items[i].x > mouse_pos.x) {
+                                TraceLog(LOG_INFO, "Inserting at %d; graph_points.count: %d", i, graph_points.count);
                                 Vector2 temp = mouse_pos;
-                                for (int j = points.count - 1; j > i; --j) {
+                                for (int j = graph_points.count - 1; j > i; --j) {
                                     TraceLog(LOG_INFO, "Swapped %d and %d", j, j - 1);
-                                    points.items[j] = points.items[j - 1];
+                                    graph_points.items[j] = graph_points.items[j - 1];
                                 }
-                                points.items[i] = temp;
+                                graph_points.items[i] = temp;
                                 break;
                             }
                         }
@@ -354,16 +366,58 @@ int main(int argc, char* argv[]) {
                         pick_col = GetImageColor(img, mouse_pos.x, mouse_pos.y);
                     } break;
                     case DEL: {
+                        int found = 0;
+                        for (int i = 0; i < graph_points.count; ++i) {
+                            if (Vector2Length(Vector2Subtract(graph_points.items[i], mouse_pos)) < 1.0f) {
+                                found = 1;
+                                for (int j = 0; j < undos.count; ++j) {
+                                    if (undos.items[j].undotype == UNDO_GRAPH_POINT && undos.items[j].pos == i) {
+                                        for (int k = j + 1; k < undos.count; ++k) {
+                                            undos.items[j - 1] = undos.items[j];
+                                        }
+                                        undos.count--;
+                                        break;
+                                    }
+                                }
+                                for (int j = i + 1; j < graph_points.count; ++j) {
+                                    graph_points.items[j - 1] = graph_points.items[j];
+                                }
+                                graph_points.count--;
+                                break;
+                            }
+                        }
+                        if (found) {
+                            break;
+                        }
                         for (int i = 0; i < points.count; ++i) {
                             if (Vector2Length(Vector2Subtract(points.items[i], mouse_pos)) < 1.0f) {
+                                for (int j = 0; j < undos.count; ++j) {
+                                    if (undos.items[j].undotype == UNDO_POINT && undos.items[j].pos == i) {
+                                        for (int k = j + 1; k < undos.count; ++k) {
+                                            undos.items[j - 1] = undos.items[j];
+                                        }
+                                        undos.count--;
+                                        break;
+                                    }
+                                }
                                 for (int j = i + 1; j < points.count; ++j) {
                                     points.items[j - 1] = points.items[j];
                                 }
                                 points.count--;
                                 break;
-                            }
+                            }    
                         }
                     } break;
+                    case POINT: {
+                        undo.undotype = UNDO_POINT;
+                        undo.prev_len = points.count;
+                        da_append(&undos, undo);
+                        if (snapping && origin_set && unitv_set) {
+                            mouse_pos = snap_to_grid(origin, unitv, mouse_pos);
+                        }
+                        da_append(&points, mouse_pos);
+                    } break;
+                    default: assert(0 && "unreachable");
                 }
             } else {
                 is_drawing = 0;
@@ -381,6 +435,7 @@ int main(int argc, char* argv[]) {
                         undo.prev_len = lines.count;
                         da_append(&lines, ((graphvec_t){draw_startpos, mouse_pos}));
                     } break;
+                    default: assert(0 && "unreachable");
                 }
 
                 da_append(&undos, undo);
@@ -412,15 +467,25 @@ int main(int argc, char* argv[]) {
                     DrawCircleV(mouse_pos, 0.5f, (Color){255, 128, 128, 255});
                 }
 
+                for (int i = 0; i < graph_points.count; ++i) {
+                    Color col;
+                    if (Vector2Length(Vector2Subtract(mouse_pos, graph_points.items[i])) < 1.0f) {
+                        col = (Color){255, 0, 0, 255};
+                    } else {
+                        col = (Color){255, 0, 255, 255};
+                    }
+                    if (i) {
+                        DrawLineEx(graph_points.items[i-1], graph_points.items[i], 1.25f, (Color){255, 0, 255, 255});
+                    }
+                    DrawCircleV(graph_points.items[i], 1.0f, col);
+                }
+
                 for (int i = 0; i < points.count; ++i) {
                     Color col;
                     if (Vector2Length(Vector2Subtract(mouse_pos, points.items[i])) < 1.0f) {
                         col = (Color){255, 0, 0, 255};
                     } else {
                         col = (Color){255, 0, 255, 255};
-                    }
-                    if (i) {
-                        DrawLineEx(points.items[i-1], points.items[i], 1.25f, (Color){255, 0, 255, 255});
                     }
                     DrawCircleV(points.items[i], 1.0f, col);
                 }
