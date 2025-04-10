@@ -202,15 +202,38 @@ int main(int argc, char* argv[]) {
             camera.target.y += cam_speed.y;
         }
 
+        if (origin_set && unitv_set) {
+            if (IsKeyPressed(KEY_KP_4)) {
+                unitv.x -= 0.025;
+            } else if (IsKeyPressed(KEY_KP_6)) {
+                unitv.x += 0.025;
+            }
+
+            if (IsKeyPressed(KEY_KP_8)) {
+                unitv.y -= 0.025;
+            } else if(IsKeyPressed(KEY_KP_2)) {
+                unitv.y += 0.025;
+            }
+        }
+
         if (!is_drawing && IsKeyPressed(KEY_ENTER) && origin_set && unitv_set) {
             fd = freopen(argv[2], "w", fd);
-            printf("Points:\n");
-            fprintf(fd, "Points:\n");
+            printf("Graph points:\n");
+            fprintf(fd, "Graph points:\n");
             for (int i = 0; i < graph_points.count; ++i) {
                 Vector2 pu = to_units(origin, unitv, graph_points.items[i]);
                 printf("(%.2f, %.2f)", pu.x, pu.y);
                 fprintf(fd, "(%.2f, %.2f)", pu.x, pu.y);
             }
+
+            printf("Points:\n");
+            fprintf(fd, "Points:\n");
+            for (int i = 0; i < points.count; ++i) {
+                Vector2 pu = to_units(origin, unitv, points.items[i]);
+                printf("(%.2f, %.2f)", pu.x, pu.y);
+                fprintf(fd, "(%.2f, %.2f)", pu.x, pu.y);
+            }
+            
             printf("\n");
             printf("Lines:\n");
             fprintf(fd, "\n");
@@ -228,11 +251,12 @@ int main(int argc, char* argv[]) {
                 printf("{%.3f*x + %.3f};\n", k, b);
                 fprintf(fd, "{%.3f*x + %.3f};\n", k, b);
             }
+
             printf("Vectors:\n");
             fprintf(fd, "Vectors:\n");
             for (int i = 0; i < vecs.count; i++) {
-                Vector2 su = to_units(origin, unitv, lines.items[i].start);
-                Vector2 eu = to_units(origin, unitv, lines.items[i].end);
+                Vector2 su = to_units(origin, unitv, vecs.items[i].start);
+                Vector2 eu = to_units(origin, unitv, vecs.items[i].end);
                 printf("(%.3f, %.3f) -- (%.3f, %.3f);\n", su.x, su.y, eu.x, eu.y);
                 fprintf(fd, "(%.3f, %.3f) -- (%.3f, %.3f);\n", su.x, su.y, eu.x, eu.y);
             }
@@ -507,6 +531,23 @@ int main(int argc, char* argv[]) {
         EndDrawing();
     }
 
+    if (points.items) {
+        free(points.items);
+    }
+
+    if (graph_points.items) {
+        free(graph_points.items);
+    }
+
+    if (vecs.items) {
+        free(vecs.items);
+    }
+
+    if (lines.items) {
+        free(lines.items);
+    }
+
+    UnloadImage(img);
     fclose(fd);
     CloseWindow();
     return 0;
